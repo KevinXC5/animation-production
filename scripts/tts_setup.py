@@ -1,20 +1,17 @@
 """
-豆包 TTS 配置助手：查看配置状态、筛选音色、写入 .env、生成试听样音。
+豆包 TTS 配置助手：查看配置状态、列出推荐音色、写入 .env。
 
   status   查看 .env 中的 APIKEY / VOICE 是否已配置（APIKEY 只显示掩码）
-  voices   按场景、性别、语种、关键词筛选官方音色目录
+  voices   列出豆包控制台推荐音色
   set      写入 VOICE，APIKEY 从标准输入读取（避免出现在命令行参数和进程列表中）
-  preview  用候选音色各合成一句试听样音，同时验证 APIKEY 可用
 
 示例：
   python3 tts_setup.py status --env .env
-  python3 tts_setup.py voices --scene 教育 --gender female --limit 10
+  python3 tts_setup.py voices
   printf '%s' "$KEY" | python3 tts_setup.py set --env .env --apikey-stdin --voice zh_female_vv_uranus_bigtts
-  python3 tts_setup.py preview --env .env --voices zh_female_vv_uranus_bigtts,zh_male_m191_uranus_bigtts --out tts_preview
 """
 
 import argparse
-import asyncio
 import json
 import os
 import subprocess
@@ -23,7 +20,18 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 CATALOG = HERE.parent / "references" / "doubao-voices.json"
-sys.path.insert(0, str(HERE))
+
+# 豆包语音控制台“推荐音色”列表，供用户直接选择
+RECOMMENDED = [
+    ("zh_female_vv_uranus_bigtts", "Vivi 2.0", "语调平稳、咬字柔和、自带治愈安抚力的女声"),
+    ("zh_female_xiaohe_uranus_bigtts", "小何 2.0", "声线甜美有活力的妹妹，活泼开朗，笑容明媚"),
+    ("zh_male_m191_uranus_bigtts", "云舟 2.0", "声音磁性的男生，成熟理性，做事有条理，让人信赖"),
+    ("zh_male_taocheng_uranus_bigtts", "小天 2.0", "眉目清朗男大，清澈温润有朝气，开朗真诚"),
+    ("zh_male_shaonianzixin_uranus_bigtts", "少年梓辛 2.0", "少年感十足的清爽男生，温柔亲切，阳光开朗"),
+    ("zh_female_meilinvyou_uranus_bigtts", "魅力女友 2.0", "性感妩媚的御姐，成熟有魅力，风情十足"),
+    ("zh_male_liufei_uranus_bigtts", "刘飞 2.0", "逻辑清晰、理性稳重的男性"),
+    ("zh_female_yingyujiaoxue_uranus_bigtts", "Tina老师 2.0", "磁性知性的青年讲师，温柔耐心，专业靠谱"),
+]
 
 
 def load_catalog() -> list[dict]:
@@ -75,33 +83,12 @@ def cmd_status(a):
     }, ensure_ascii=False, indent=1))
 
 
-def gender_of(v: dict) -> str:
-    vid = v["id"].lower()
-    return "female" if "_female_" in vid else "male" if "_male_" in vid else "unknown"
-
-
 def cmd_voices(a):
-    out = []
-    for v in load_catalog():
-        blob = " ".join([v["name"], v["scene"], v["lang"], v["tags"], v["id"]])
-        if a.scene and a.scene not in v["scene"]:
-            continue
-        if a.gender and gender_of(v) != a.gender:
-            continue
-        if a.lang and a.lang not in (v["lang"] + v["scene"]):
-            continue
-        if a.group and v["group"] != a.group:
-            continue
-        if a.search and not all(k in blob for k in a.search.split()):
-            continue
-        out.append(v)
     if a.json:
-        print(json.dumps(out[: a.limit], ensure_ascii=False, indent=1))
+        print(json.dumps([{"id": i, "name": n, "desc": d} for i, n, d in RECOMMENDED], ensure_ascii=False, indent=1))
         return
-    print(f"共 {len(out)} 个匹配，显示前 {min(len(out), a.limit)} 个：")
-    for v in out[: a.limit]:
-        extra = f"  [{v['tags']}]" if v["tags"] else ""
-        print(f"  {v['name']:<14} {v['id']:<48} {v['scene']} | {v['lang']}{extra}")
+    for i, n, d in RECOMMENDED:
+        print(f"  {n:<10} {i:<42} {d}")
 
 
 def upsert_env(path: Path, updates: dict):
@@ -145,62 +132,17 @@ def cmd_set(a):
     print(f"已写入 {a.env.resolve()}：{shown}（权限 600）{note}")
 
 
-async def _preview(a):
-    from doubao_tts import BYTES_PER_SEC, FatalError, synthesize, validate, write_audio
-    env = parse_env(read_env_lines(a.env))
-    key = os.environ.get("APIKEY") or env.get("APIKEY", "")
-    if not key:
-        sys.exit("未配置 APIKEY")
-    by_id = {v["id"]: v for v in load_catalog()}
-    a.out.mkdir(parents=True, exist_ok=True)
-    results = []
-    for vid in [x.strip() for x in a.voices.split(",") if x.strip()]:
-        name = by_id.get(vid, {}).get("name", vid)
-        path = a.out / f"{vid}.mp3"
-        try:
-            pcm, words = await synthesize(a.text, a.tone, key, vid, a.rate)
-            problems = validate(a.text, pcm, words)
-            write_audio(pcm, path, "mp3")
-            results.append({"voice": vid, "name": name, "file": str(path.resolve()),
-                            "duration": round(len(pcm) / BYTES_PER_SEC, 2), "warnings": problems})
-            print(f"  ✓ {name}（{vid}）→ {path}")
-        except FatalError as e:
-            sys.exit(f"APIKEY 或权限不可用，已停止：{e}")
-        except Exception as e:
-            results.append({"voice": vid, "name": name, "error": str(e)})
-            print(f"  ✗ {name}（{vid}）：{e}")
-    (a.out / "preview.json").write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
-    if not any("file" in r for r in results):
-        sys.exit(1)
-
-
 def main():
     ap = argparse.ArgumentParser(description="豆包 TTS 配置助手")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("status"); p.add_argument("--env", type=Path, default=Path(".env")); p.set_defaults(fn=cmd_status)
-    p = sub.add_parser("voices")
-    p.add_argument("--scene", help="通用 / 教育 / 视频配音 / 有声阅读 / 角色扮演 / 客服 …")
-    p.add_argument("--gender", choices=["female", "male"])
-    p.add_argument("--lang", help="语种关键词，如 英语、日语、粤语")
-    p.add_argument("--group", choices=["中文", "外语"])
-    p.add_argument("--search", help="名称或标签关键词，空格表示同时满足")
-    p.add_argument("--limit", type=int, default=30)
-    p.add_argument("--json", action="store_true")
-    p.set_defaults(fn=cmd_voices)
+    p = sub.add_parser("voices"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_voices)
     p = sub.add_parser("set")
     p.add_argument("--env", type=Path, default=Path(".env"))
     p.add_argument("--apikey-stdin", action="store_true", help="从标准输入读取 APIKEY")
     p.add_argument("--voice")
     p.add_argument("--allow-unlisted", action="store_true")
     p.set_defaults(fn=cmd_set)
-    p = sub.add_parser("preview")
-    p.add_argument("--env", type=Path, default=Path(".env"))
-    p.add_argument("--voices", required=True, help="逗号分隔的音色 ID")
-    p.add_argument("--text", default="你好呀！接下来，我来给你讲一个有趣的故事。")
-    p.add_argument("--tone", default="")
-    p.add_argument("--rate", type=int, default=0)
-    p.add_argument("--out", type=Path, default=Path("tts_preview"))
-    p.set_defaults(fn=lambda a: asyncio.run(_preview(a)))
     a = ap.parse_args()
     a.fn(a)
 

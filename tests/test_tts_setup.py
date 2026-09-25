@@ -42,7 +42,9 @@ class SetupTests(unittest.TestCase):
         self.assertGreater(len(voices), 300)
         self.assertEqual(len(ids), len(set(ids)))
         self.assertIn("zh_female_vv_uranus_bigtts", ids)
-        self.assertEqual(M.gender_of({"id": "zh_male_m191_uranus_bigtts"}), "male")
+        # 推荐音色必须都在官方目录中
+        for vid, _, _ in M.RECOMMENDED:
+            self.assertIn(vid, ids)
 
 
 if __name__ == "__main__":
