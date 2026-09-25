@@ -75,13 +75,40 @@ description: 制作可导出视频的通用动画：二维或三维短片、动�
 ### 5. 可选声音与字幕
 
 有声音需求时读取 [声音与同步](references/audio.md)：
-- **默认 TTS 为豆包语音（seed-tts-2.0）**：先读 [豆包 TTS 使用文档](references/doubao-tts.md)，直接调用 `scripts/doubao_tts.py`。凭据取自环境变量或项目 `.env` 的 `APIKEY` 与 `VOICE`，默认关闭结尾水印，输出每句音频与字级时间戳。用户指定其他服务或真人旁白时，改按对应文档接入。
+- **默认 TTS 为豆包语音（seed-tts-2.0）**：配置完成后读 [豆包 TTS 使用文档](references/doubao-tts.md)，调用 `scripts/doubao_tts.py` 合成。默认关闭结尾水印，输出每句音频与字级时间戳。
+- 合成前必须先完成下方「语音配置交互」，得到用户确认的方案、可用 APIKEY 与音色。
 - 密钥只在本地或后端读取，不打印或发送到前端。
 - 先测试两三句，确认音色、语速和时间轴，再批量合成。
 - 按实际发声边界与音频实长编排，不能以固定几秒的空白补齐所有场景。节奏取决于作品目标，不强制快节奏。
 - 旁白、音乐和音效独立混音，旁白出现时按需闪避；配乐来源与授权必须清楚。
 - 字幕可为单语、多语、烧录或独立轨，按用户要求实现。无字级证据时不声称精确卡拉 OK 同步。
 - 无声音需求时标记 `audio: none`，跳过本阶段，不擅自加入配音或音乐。
+
+#### 语音配置交互
+
+作品需要旁白时，在写剧本之前完成本流程；若用户在需求里已明确“不要配音”“用真人录音”或指定了其他服务，跳过相应步骤。所有提问用 AskUserQuestion，单选，推荐项放第一位并标“（推荐）”。配置脚本为 `scripts/tts_setup.py`，`.env` 默认位于项目根目录。
+
+1. **查状态**：`python3 <skill-dir>/scripts/tts_setup.py status --env <项目>/.env`，只看返回的掩码与字段，不读取或复述 `.env` 原文。
+2. **是否用豆包**：问“旁白用什么方式生成？”，选项：
+   - 豆包语音合成（推荐）：默认方案，自动得到字级时间戳和字幕同步
+   - 不需要旁白：纯音乐或无声作品
+   - 其他 TTS 服务或真人录音：用户提供服务文档或音频
+   只有选豆包才继续下面的步骤。
+3. **APIKEY**：
+   - 已配置：问“检测到已有 APIKEY（显示掩码），怎么处理？”，选项“继续使用（推荐）/ 更换新的 key”。
+   - 未配置或选择更换：问“请提供豆包语音的 APIKEY”，选项：
+     - 我在对话里粘贴：用户通过“Other”输入 key
+     - 我自己写入 .env：提示用户在 `<项目>/.env` 写一行 `APIKEY=...` 后回复“好了”，再用 status 复查
+   - 选择粘贴时，先说明一次：key 会出现在本次对话记录中，介意的话可改选自行写入。
+   - 用户给出 key 后，通过标准输入写入，不放在命令参数里：
+     `printf '%s' '<key>' | python3 <skill-dir>/scripts/tts_setup.py set --env <项目>/.env --apikey-stdin`
+   - 此后在回复、日志、文档中只显示掩码，不复述 key。key 获取地址：火山引擎控制台 → 豆包语音 → API Key 管理（https://console.volcengine.com/speech/new/setting/apikeys）。
+4. **选音色**：音色目录在 `references/doubao-voices.json`（官方 2.0 音色表，共 431 个），用 `tts_setup.py voices` 筛选。
+   - 先按作品问一次偏好，例如“旁白想要什么样的声音？”，选项示例：温柔亲切的女声 / 沉稳有质感的男声 / 活泼的少年或少女音 / 特色角色音（如卡通、方言）。已有 VOICE 时，把“沿用当前音色 <名称>”作为推荐项放第一位。
+   - 按偏好与作品场景筛出 3–4 个候选，**先合成试听**：`tts_setup.py preview --env ... --voices a,b,c --text "<本片的一句真实台词>" --out <项目>/tts_preview`，并打开样音给用户听。preview 同时验证 key 是否可用；鉴权失败则回到第 3 步。
+   - 再问“选哪个音色？”，选项为候选音色（标签写名称，说明写风格与试听文件名），用户也可以在“Other”里填写目录外的音色 ID 或要求再换一批。
+   - 写入：`python3 <skill-dir>/scripts/tts_setup.py set --env <项目>/.env --voice <ID>`。脚本会校验 ID、将 `.env` 设为 600 权限，并在 git 仓库里把 `.env` 加入 `.gitignore`。
+5. **确认**：再次运行 status，向用户汇报 `.env` 路径、APIKEY 掩码与音色名称，然后进入剧本与合成。
 
 **门槛：**声音清晰无截断，字幕可读且同步；数值检查与人工试听分开记录，无法试听如实说明。
 
@@ -100,6 +127,11 @@ description: 制作可导出视频的通用动画：二维或三维短片、动�
 ## 附带工具
 
 ```bash
+# 豆包 TTS 配置：查看状态、筛选音色、写入 .env、试听
+python3 <skill-dir>/scripts/tts_setup.py status --env .env
+python3 <skill-dir>/scripts/tts_setup.py voices --scene 教育 --gender female
+python3 <skill-dir>/scripts/tts_setup.py preview --env .env --voices <id1>,<id2> --out tts_preview
+
 # 豆包 TTS：逐句合成、字级时间戳、指纹缓存（详见 references/doubao-tts.md）
 python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --env .env --rate 10
 ```

@@ -15,6 +15,17 @@
 9. **中英混读**：`explicit_language: "zh-cn"`；设为 `en` 会跳过中文。
 10. **错误处理**：鉴权失败、配额不足等不可恢复的错误应立即停止，避免重复计费；网络中断可有限次重试。
 
+## 配置
+
+凭据与音色保存在项目 `.env`：
+
+```text
+APIKEY=<火山引擎控制台 → 豆包语音 → API Key 管理>
+VOICE=<音色 ID，见 doubao-voices.json>
+```
+
+用 `scripts/tts_setup.py` 完成交互式配置（流程见 SKILL.md「语音配置交互」）。`doubao-voices.json` 由官方音色列表（https://www.volcengine.com/docs/6561/1257544 ，2026-09-22 版）解析而来，包含 2.0 中文音色 294 个、外语音色 137 个，字段为场景、名称、ID、语种、能力与标签。官方列表更新后可重新解析。
+
 ## 脚本用法
 
 ```bash

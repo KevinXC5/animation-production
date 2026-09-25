@@ -21,6 +21,8 @@
 | `references/audio.md` | TTS、时间戳校验、配乐与混音 |
 | `references/rendering.md` | 样片审阅、后台长任务、编码与成片验收 |
 | `references/collaboration.md` | 子代理分工、中断恢复、跨项目复用 |
+| `scripts/tts_setup.py` | 豆包配置助手：状态检查、音色筛选、写入 .env、试听 |
+| `references/doubao-voices.json` | 官方 2.0 音色目录（431 个） |
 | `scripts/doubao_tts.py` | 豆包 TTS 逐句合成：字级时间戳、关闭水印、指纹缓存 |
 | `scripts/check_delivery.py` | 时间线、帧序列与成片参数检查 |
 | `tests/` | 检查脚本的回归测试 |
