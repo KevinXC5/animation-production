@@ -158,8 +158,9 @@ def validate_timeline(data, report, require_bilingual=False):
             if ws < word_end - tolerance:
                 report.error(f"{wl} 时间重叠或倒置")
             word_end = we
-        if words and isinstance(cn, str) and text_key("".join(pieces)) != text_key(cn):
-            report.error(f"{label} 字幕文字未完整覆盖中文句子")
+        # 字级文本对照该句原文，单语 text 字段同样校验
+        if words and isinstance(source_text, str) and text_key("".join(pieces)) != text_key(source_text):
+            report.error(f"{label} 字幕文字未完整覆盖原文")
         if rid:
             lines[rid] = bounds
 

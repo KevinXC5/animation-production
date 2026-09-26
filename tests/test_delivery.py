@@ -40,6 +40,13 @@ class DeliveryTests(unittest.TestCase):
         self.assertFalse(self.check(mono).errors)
         self.assertTrue(self.check(mono, bilingual=True).errors)
 
+    def test_single_language_words_must_cover_text(self):
+        # 单语 text 字段也要校验字级文本是否覆盖原文
+        def mono_mismatch(d):
+            row = d["lines"][0]
+            row.pop("cn"); row.pop("en"); row["text"] = "你好呀！"
+        self.assertTrue(self.check(mono_mismatch).errors)
+
     def test_silent_video(self):
         info = {"streams": [{"codec_type": "video", "width": 1920, "height": 1080,
                              "avg_frame_rate": "24/1", "duration": "3.0"}]}

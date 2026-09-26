@@ -9,7 +9,7 @@
 
 用法：
   python3 doubao_tts.py --text "你好，小朋友。" --out out/tts
-  python3 doubao_tts.py --lines lines.json --out out/tts [--env .env] [--rate 10] [--format mp3]
+  python3 doubao_tts.py --lines lines.json --out out/tts [--env .env] [--rate 0] [--format mp3]
   lines.json：[{"id": "l01", "text": "……", "tone": "开心地说"}, ...]
 输出：<out>/<id>.<wav|mp3>、<out>/words.json、<out>/manifest.json
 凭据：环境变量或 .env 中的 APIKEY 与 VOICE（兼容 KEY=VALUE 与 KEY: VALUE）

@@ -15,7 +15,7 @@
 | 路径 | 内容 |
 |---|---|
 | `SKILL.md` | 技能入口：六阶段流程与各阶段门槛 |
-| `references/doubao-tts.md` | 豆包 TTS 接口文档与实测要点（默认 TTS） |
+| `references/doubao-tts.md` | 豆包 TTS 配置交互、实测要点与接口文档（默认 TTS） |
 | `references/design.md` | 技术选型、视觉参考拆解、运动设计 |
 | `references/engineering.md` | 工程结构、时间线数据协议、缓存失效规则 |
 | `references/audio.md` | TTS、时间戳校验、配乐与混音 |
@@ -33,7 +33,7 @@
 
 ```bash
 python3 scripts/doubao_tts.py --text "你好，欢迎收看。" --out audio/tts --env .env
-python3 scripts/doubao_tts.py --lines lines.json --out audio/tts --env .env --rate 10
+python3 scripts/doubao_tts.py --lines lines.json --out audio/tts --env .env
 ```
 
 依赖：`pip install websockets`，输出 MP3 时需要 ffmpeg。

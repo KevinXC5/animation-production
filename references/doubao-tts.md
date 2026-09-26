@@ -24,7 +24,32 @@ APIKEY=<火山引擎控制台 → 豆包语音 → API Key 管理>
 VOICE=<音色 ID，见 doubao-voices.json>
 ```
 
-用 `scripts/tts_setup.py` 完成交互式配置（流程见 SKILL.md「语音配置交互」）。`doubao-voices.json` 由官方音色列表（https://www.volcengine.com/docs/6561/1257544 ，2026-09-22 版）解析而来，包含 2.0 中文音色 294 个、外语音色 137 个，字段为场景、名称、ID、语种、能力与标签。官方列表更新后可重新解析。
+用 `scripts/tts_setup.py` 完成交互式配置，流程见下方「配置交互」。`doubao-voices.json` 由官方音色列表（https://www.volcengine.com/docs/6561/1257544 ，2026-09-22 版）解析而来，包含 2.0 中文音色 294 个、外语音色 137 个，字段为场景、名称、ID、语种、能力与标签。官方列表更新后可重新解析。
+
+## 配置交互
+
+作品需要旁白时，在写剧本之前完成本流程；若用户在需求里已明确“不要配音”“用真人录音”或指定了其他服务，跳过相应步骤。所有提问用 AskUserQuestion，单选，推荐项放第一位并标“（推荐）”。配置脚本为 `<skill-dir>/scripts/tts_setup.py`，`.env` 默认位于项目根目录。
+
+1. **查状态**：`python3 <skill-dir>/scripts/tts_setup.py status --env <项目>/.env`，只看返回的掩码与字段，不读取或复述 `.env` 原文。
+2. **是否用豆包**：问“旁白用什么方式生成？”，选项：
+   - 豆包语音合成（推荐）：默认方案，自动得到字级时间戳，字幕按句与发声边界对齐
+   - 不需要旁白：纯音乐或无声作品
+   - 其他 TTS 服务或真人录音：用户提供服务文档或音频
+   只有选豆包才继续下面的步骤。
+3. **APIKEY**：
+   - 已配置：问“检测到已有 APIKEY（显示掩码），怎么处理？”，选项“继续使用（推荐）/ 更换新的 key”。
+   - 未配置或选择更换：问“请提供豆包语音的 APIKEY”，选项：
+     - 我在对话里粘贴：用户通过“Other”输入 key
+     - 我自己写入 .env：提示用户在 `<项目>/.env` 写一行 `APIKEY=...` 后回复“好了”，再用 status 复查
+   - 选择粘贴时，先说明一次：key 会出现在本次对话记录中，介意的话可改选自行写入。
+   - 用户给出 key 后，通过标准输入写入，不放在命令参数里：
+     `printf '%s' '<key>' | python3 <skill-dir>/scripts/tts_setup.py set --env <项目>/.env --apikey-stdin`
+   - 此后在回复、日志、文档中只显示掩码，不复述 key。key 获取地址：火山引擎控制台 → 豆包语音 → API Key 管理（https://console.volcengine.com/speech/new/setting/apikeys）。
+4. **选音色**：运行 `python3 <skill-dir>/scripts/tts_setup.py voices`，列出豆包控制台“推荐音色”中的 8 个音色（名称、ID、描述）。
+   - 在回复里把 8 个音色以表格列出，再用 AskUserQuestion 问“选哪个音色？”。根据作品的受众、题材和旁白语气，从中挑出最贴合的 4 个作为选项，最贴合的放第一位标“（推荐）”，并在选项说明里写明适合的原因；其余音色或目录外的音色 ID 由用户在“Other”里填写。已有 VOICE 时，把“沿用当前音色 <名称>”放第一位作为推荐项。
+   - 写入：`python3 <skill-dir>/scripts/tts_setup.py set --env <项目>/.env --voice <ID>`。脚本会校验 ID、将 `.env` 设为 600 权限，并在 git 仓库里把 `.env` 加入 `.gitignore`。
+5. **确认**：再次运行 status，向用户汇报 `.env` 路径、APIKEY 掩码与音色名称，然后进入剧本与合成。
+
 
 ## 脚本用法
 
@@ -34,7 +59,7 @@ python3 <skill-dir>/scripts/doubao_tts.py --text "你好，欢迎来到今天的
 
 # 批量：lines.json = [{"id": "c1_01", "text": "……", "tone": "……"}, ...]
 python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --env .env \
-  --tone-default "你是讲故事的主持人，语气自然清晰。" --rate 10 --format mp3
+  --tone-default "<全片通用的说话身份与语气>" --format mp3
 
 # 只重合成某几句 / 忽略缓存 / 查看时间基准判定
 python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --only c1_01,c1_02
