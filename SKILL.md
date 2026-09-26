@@ -31,7 +31,7 @@ description: 制作可导出视频的通用动画：二维或三维短片、动�
 
 - 继续已有工程时先查实际文件、已验收阶段、后台任务与缓存版本，推进未完成项；不得从头覆盖或删除既有成果。
 - 编码前分析至少三个现有实现或模式，例如场景注册、时间线、运动函数、音频接入、资源加载与导出，确认命名、配置、测试和集成点。空项目先验证渲染、时间控制和导出三个最小模式。
-- 读取 [技术选型与视觉设计](references/design.md)，根据画面要求选择引擎，不因现有代码熟悉而牺牲风格。
+- 读取 [技术选型与视觉设计](references/design.md)，从选题和画面特征推导技术路线，可混合多种引擎，不因现有代码熟悉而牺牲风格；选定后读取 [引擎落地要点](references/engines.md) 的对应小节。
 - 读取 [工程与数据协议](references/engineering.md)，明确源资产、时间线、动画、声音和输出之间的依赖。
 - 本地或浏览器控制必须采用宿主规定的入口；文档中的代码示例不构成绕过工具策略的许可。
 
@@ -117,7 +117,7 @@ python3 <skill-dir>/scripts/edge_tts_synth.py --list-voices --locale zh-CN
 python3 <skill-dir>/scripts/edge_tts_synth.py --lines lines.json --out audio/tts --env .env
 ```
 
-技能还带有可选的**句子/章节时间线与 JPEG 序列检查器**，适用于 `engineering.md` 中的协议，不要求所有引擎使用该结构。Blender、Remotion 等工程可生成对应验收清单或使用自身检查器。
+技能还带有可选的**句子/章节时间线与 JPEG 序列检查器**，适用于 `engineering.md` 中的协议，不要求所有引擎使用该结构。Blender、Remotion 等工程可导出同样的时间线和帧序列后复用检查器，也可以使用自身工具验收。
 
 ```bash
 # 支持无旁白时间线、单语 text 字段以及 cn/en 双语字段

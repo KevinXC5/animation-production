@@ -18,6 +18,7 @@
 | `references/doubao-tts.md` | 豆包 TTS 配置交互、实测要点与接口文档（默认 TTS） |
 | `references/edge-tts.md` | edge-tts 免费备选方案：限制、配置交互与用法 |
 | `references/design.md` | 技术选型、视觉参考拆解、运动设计 |
+| `references/engines.md` | 各引擎落地要点：确定性出帧、导出、色彩与透明 |
 | `references/engineering.md` | 工程结构、时间线数据协议、缓存失效规则 |
 | `references/audio.md` | TTS、时间戳校验、配乐与混音 |
 | `references/rendering.md` | 样片审阅、后台长任务、编码与成片验收 |
