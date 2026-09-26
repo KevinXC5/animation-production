@@ -2,18 +2,20 @@
 豆包 TTS 配置助手：查看配置状态、列出推荐音色、写入 .env。
 
   status   查看 .env 中的 APIKEY / VOICE 是否已配置（APIKEY 只显示掩码）
-  voices   列出豆包控制台推荐音色
-  set      写入 VOICE，APIKEY 从标准输入读取（避免出现在命令行参数和进程列表中）
+  voices   列出豆包控制台推荐音色；--lang / --keyword 在完整目录中按语种或关键词筛选
+  set      写入 VOICE 或 EDGE_VOICE，APIKEY 从标准输入读取（避免出现在命令行参数和进程列表中）
 
 示例：
   python3 tts_setup.py status --env .env
   python3 tts_setup.py voices
+  python3 tts_setup.py voices --lang 美式英语
   printf '%s' "$KEY" | python3 tts_setup.py set --env .env --apikey-stdin --voice zh_female_vv_uranus_bigtts
 """
 
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -79,15 +81,35 @@ def cmd_status(a):
         "apikey_set": bool(env.get("APIKEY")), "apikey": mask(env.get("APIKEY", "")),
         "voice": voice or None, "voice_name": by_id.get(voice, {}).get("name"),
         "voice_in_catalog": voice in by_id if voice else None,
+        "edge_voice": env.get("EDGE_VOICE") or None,
         "git": git_ignore_status(a.env),
     }, ensure_ascii=False, indent=1))
 
 
+def filter_catalog(lang: str = "", keyword: str = "") -> list[dict]:
+    """按语种和关键词（匹配名称、场景、标签）筛选完整音色目录。"""
+    out = []
+    for v in load_catalog():
+        if lang and lang not in v.get("lang", ""):
+            continue
+        text = " ".join(str(v.get(k, "")) for k in ("name", "scene", "tags", "group"))
+        if keyword and keyword not in text:
+            continue
+        out.append(v)
+    return out
+
+
 def cmd_voices(a):
+    if a.lang or a.keyword:
+        rows = [(v["id"], v["name"], f'{v.get("scene", "")} | {v.get("lang", "")}') for v in filter_catalog(a.lang, a.keyword)]
+        if not rows:
+            sys.exit("目录中没有符合条件的音色")
+    else:
+        rows = RECOMMENDED
     if a.json:
-        print(json.dumps([{"id": i, "name": n, "desc": d} for i, n, d in RECOMMENDED], ensure_ascii=False, indent=1))
+        print(json.dumps([{"id": i, "name": n, "desc": d} for i, n, d in rows], ensure_ascii=False, indent=1))
         return
-    for i, n, d in RECOMMENDED:
+    for i, n, d in rows:
         print(f"  {n:<10} {i:<42} {d}")
 
 
@@ -119,6 +141,11 @@ def cmd_set(a):
         if a.voice not in ids and not a.allow_unlisted:
             sys.exit(f"音色 {a.voice} 不在官方 2.0 目录中；若是复刻或新上线音色，加 --allow-unlisted")
         updates["VOICE"] = a.voice
+    if a.edge_voice:
+        # edge-tts 音色名形如 zh-CN-XiaoxiaoNeural、zh-CN-liaoning-XiaobeiNeural
+        if not re.fullmatch(r"[a-z]{2,3}-[A-Z]{2}(-[a-z]+)?-\w+Neural", a.edge_voice) and not a.allow_unlisted:
+            sys.exit(f"edge-tts 音色名 {a.edge_voice} 格式不对；可用 edge_tts_synth.py --list-voices 查看，确认无误可加 --allow-unlisted")
+        updates["EDGE_VOICE"] = a.edge_voice
     if not updates:
         sys.exit("没有要写入的内容")
     upsert_env(a.env, updates)
@@ -136,11 +163,16 @@ def main():
     ap = argparse.ArgumentParser(description="豆包 TTS 配置助手")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("status"); p.add_argument("--env", type=Path, default=Path(".env")); p.set_defaults(fn=cmd_status)
-    p = sub.add_parser("voices"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_voices)
+    p = sub.add_parser("voices")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--lang", default="", help="按语种筛选完整目录，如 美式英语、日语")
+    p.add_argument("--keyword", default="", help="按名称、场景或标签关键词筛选完整目录")
+    p.set_defaults(fn=cmd_voices)
     p = sub.add_parser("set")
     p.add_argument("--env", type=Path, default=Path(".env"))
     p.add_argument("--apikey-stdin", action="store_true", help="从标准输入读取 APIKEY")
-    p.add_argument("--voice")
+    p.add_argument("--voice", help="豆包音色 ID")
+    p.add_argument("--edge-voice", help="edge-tts 音色名，如 zh-CN-XiaoxiaoNeural")
     p.add_argument("--allow-unlisted", action="store_true")
     p.set_defaults(fn=cmd_set)
     a = ap.parse_args()

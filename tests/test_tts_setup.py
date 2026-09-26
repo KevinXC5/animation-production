@@ -46,6 +46,23 @@ class SetupTests(unittest.TestCase):
         for vid, _, _ in M.RECOMMENDED:
             self.assertIn(vid, ids)
 
+    def test_edge_voice_written(self):
+        # EDGE_VOICE 与豆包 VOICE 共存，互不覆盖
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / ".env"
+            p.write_text("VOICE=v1\n")
+            M.upsert_env(p, {"EDGE_VOICE": "zh-CN-XiaoxiaoNeural"})
+            env = M.parse_env(M.read_env_lines(p))
+            self.assertEqual(env["VOICE"], "v1")
+            self.assertEqual(env["EDGE_VOICE"], "zh-CN-XiaoxiaoNeural")
+
+    def test_filter_catalog(self):
+        # 按语种筛选只返回该语种音色，关键词可进一步缩小范围
+        en = M.filter_catalog(lang="美式英语")
+        self.assertTrue(en)
+        self.assertTrue(all("美式英语" in v["lang"] for v in en))
+        self.assertLessEqual(len(M.filter_catalog(lang="美式英语", keyword=en[0]["name"])), len(en))
+
 
 if __name__ == "__main__":
     unittest.main()

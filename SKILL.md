@@ -76,6 +76,7 @@ description: 制作可导出视频的通用动画：二维或三维短片、动�
 
 有声音需求时读取 [声音与同步](references/audio.md)：
 - **默认 TTS 为豆包语音（seed-tts-2.0）**：作品需要旁白时，在写剧本之前读取 [豆包 TTS 使用文档](references/doubao-tts.md)，按其中「配置交互」得到用户确认的方案、可用 APIKEY 与音色，再调用 `scripts/doubao_tts.py` 合成。默认关闭结尾水印，输出每句音频与字级时间戳；时间戳用于确定发声边界、裁切静音和校验字幕，不代表要做逐字高亮。
+- **免费备选为 edge-tts**：用户选择免费方案时读取 [edge-tts 使用文档](references/edge-tts.md)，调用 `scripts/edge_tts_synth.py` 合成，输出格式与豆包脚本一致。
 - 密钥只在本地或后端读取，不打印或发送到前端。
 - 先测试两三句，确认音色、语速和时间轴，再批量合成。
 - 按实际发声边界与音频实长编排，不能以固定几秒的空白补齐所有场景。节奏取决于作品目标，不强制快节奏。
@@ -101,13 +102,19 @@ description: 制作可导出视频的通用动画：二维或三维短片、动�
 ## 附带工具
 
 ```bash
-# 豆包 TTS 配置：查看状态、列出推荐音色、写入 .env
+# TTS 配置：查看状态、列出推荐音色、写入 .env（豆包用 --voice，edge-tts 用 --edge-voice）
 python3 <skill-dir>/scripts/tts_setup.py status --env .env
 python3 <skill-dir>/scripts/tts_setup.py voices
+python3 <skill-dir>/scripts/tts_setup.py voices --lang 美式英语
 python3 <skill-dir>/scripts/tts_setup.py set --env .env --voice <ID>
+python3 <skill-dir>/scripts/tts_setup.py set --env .env --edge-voice zh-CN-XiaoxiaoNeural
 
-# 豆包 TTS：逐句合成、字级时间戳、指纹缓存（详见 references/doubao-tts.md）
+# 豆包 TTS：逐句合成、字级时间戳、指纹缓存；非中文旁白加 --language（详见 references/doubao-tts.md）
 python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --env .env
+
+# edge-tts 免费备选：列音色、逐句合成、词级时间戳（详见 references/edge-tts.md）
+python3 <skill-dir>/scripts/edge_tts_synth.py --list-voices --locale zh-CN
+python3 <skill-dir>/scripts/edge_tts_synth.py --lines lines.json --out audio/tts --env .env
 ```
 
 技能还带有可选的**句子/章节时间线与 JPEG 序列检查器**，适用于 `engineering.md` 中的协议，不要求所有引擎使用该结构。Blender、Remotion 等工程可生成对应验收清单或使用自身检查器。
@@ -116,14 +123,18 @@ python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --e
 # 支持无旁白时间线、单语 text 字段以及 cn/en 双语字段
 python3 <skill-dir>/scripts/check_delivery.py /绝对路径/timeline.json
 
-# 有声 MP4：帧连续性和基础媒体参数
+# 有声 MP4：帧连续性和基础媒体参数；fps 必填，尺寸按实际画幅填写
 python3 <skill-dir>/scripts/check_delivery.py /绝对路径/timeline.json \
   --frames /绝对路径/frames --fps 24 --width 1920 --height 1080 \
   --video /绝对路径/final.mp4
 
 # 无声作品使用 --silent；只有明确要求中英双语时才加 --require-bilingual
 python3 <skill-dir>/scripts/check_delivery.py /绝对路径/timeline.json \
-  --video /绝对路径/silent.mp4 --silent
+  --video /绝对路径/silent.mp4 --fps 30 --silent
+
+# 透明素材等 PNG 帧序列
+python3 <skill-dir>/scripts/check_delivery.py /绝对路径/timeline.json \
+  --frames /绝对路径/frames --frame-ext png --fps 30
 
 python3 -m unittest discover -s <skill-dir>/tests -v
 ```

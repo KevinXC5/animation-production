@@ -2,7 +2,7 @@
 
 本模块按需加载：无声作品全部跳过；音乐主导作品跳过 TTS；真人旁白直接做音频校对与对齐。语言、声线、字幕种类和停顿长度以当前作品为准。
 
-**默认 TTS 为豆包语音**，接口与实测要点见 [doubao-tts.md](doubao-tts.md)，合成脚本为 `scripts/doubao_tts.py`。用户指定其他服务时按其文档接入，下面的通用规则同样适用。
+**默认 TTS 为豆包语音**，接口与实测要点见 [doubao-tts.md](doubao-tts.md)，合成脚本为 `scripts/doubao_tts.py`。免费备选为 edge-tts，见 [edge-tts.md](edge-tts.md)，合成脚本为 `scripts/edge_tts_synth.py`。用户指定其他服务时按其文档接入，下面的通用规则同样适用。
 
 ## TTS 接入
 

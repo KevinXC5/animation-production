@@ -185,22 +185,22 @@ def validate_timeline(data, report, require_bilingual=False):
     return duration
 
 
-def validate_frames(directory, duration, fps, report):
-    """只检查约定的 f00000.jpg 序列，图像内容仍需解码验证。"""
+def validate_frames(directory, duration, fps, report, ext="jpg"):
+    """只检查约定的 f00000.<ext> 序列，图像内容仍需解码验证。"""
     expected = math.ceil(duration * fps)
     if not directory.is_dir():
         report.error(f"帧目录不存在：{directory}")
         return
     actual, empty = set(), []
     for path in directory.iterdir():
-        match = re.fullmatch(r"f(\d{5,})\.jpg", path.name)
+        match = re.fullmatch(rf"f(\d{{5,}})\.{re.escape(ext)}", path.name)
         if not match:
             continue
         if not path.is_file() or path.stat().st_size == 0:
             empty.append(path.name)
             continue
         index = int(match[1])
-        if path.name != f"f{index:05d}.jpg":
+        if path.name != f"f{index:05d}.{ext}":
             report.error(f"非标准帧名：{path.name}")
         actual.add(index)
     missing = sorted(set(range(expected)) - actual)
@@ -216,6 +216,7 @@ def validate_frames(directory, duration, fps, report):
 
 
 def validate_media(info, duration, fps, width, height, report, silent=False):
+    """width/height 为 None 时只记录实际尺寸不做比对。"""
     streams = info.get("streams", [])
     video = next((s for s in streams if s.get("codec_type") == "video"), None)
     audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
@@ -226,7 +227,7 @@ def validate_media(info, duration, fps, width, height, report, silent=False):
         report.error("成片缺少音轨；无声作品请加 --silent")
         return
     for key, expected in (("width", width), ("height", height)):
-        if video.get(key) != expected:
+        if expected is not None and video.get(key) != expected:
             report.error(f"成片 {key} 不符：{video.get(key)}，期望 {expected}")
     try:
         numerator, denominator = video["avg_frame_rate"].split("/")
@@ -234,8 +235,10 @@ def validate_media(info, duration, fps, width, height, report, silent=False):
         if abs(actual_fps - fps) > 0.01:
             report.error(f"成片帧率不符：{actual_fps}，期望 {fps}")
         tolerance = max(2 / fps, 0.08)
-        vd = float(video["duration"])
-        ad = float(audio["duration"]) if audio else vd
+        # WebM/MKV 等容器常把时长只写在容器层，轨道缺失时回退到 format.duration
+        fallback = info.get("format", {}).get("duration")
+        vd = float(video.get("duration", fallback))
+        ad = float(audio.get("duration", fallback)) if audio else vd
         if not math.isfinite(vd) or not math.isfinite(ad):
             raise ValueError("时长非有限值")
         if abs(vd - duration) > tolerance or abs(ad - duration) > tolerance:
@@ -245,7 +248,8 @@ def validate_media(info, duration, fps, width, height, report, silent=False):
         report.facts.update(video_duration=vd, audio_duration=ad if audio else None, fps=actual_fps)
     except (KeyError, ValueError, ZeroDivisionError):
         report.error("无法从 ffprobe 信息中验证帧率或轨道时长")
-    report.facts.update(video_codec=video.get("codec_name"), audio_codec=audio.get("codec_name") if audio else None)
+    report.facts.update(video_codec=video.get("codec_name"), audio_codec=audio.get("codec_name") if audio else None,
+                        width=video.get("width"), height=video.get("height"), pix_fmt=video.get("pix_fmt"))
 
 
 def main():
@@ -253,22 +257,27 @@ def main():
     parser.add_argument("timeline", type=Path)
     parser.add_argument("--frames", type=Path)
     parser.add_argument("--video", type=Path)
-    parser.add_argument("--fps", type=float, default=24)
-    parser.add_argument("--width", type=int, default=1920)
-    parser.add_argument("--height", type=int, default=1080)
+    parser.add_argument("--fps", type=float, help="检查帧序列或成片时必填")
+    parser.add_argument("--width", type=int, help="期望宽度，不填则只记录实际值")
+    parser.add_argument("--height", type=int, help="期望高度，不填则只记录实际值")
+    parser.add_argument("--frame-ext", default="jpg", help="帧序列扩展名，如 jpg、png")
     parser.add_argument("--silent", action="store_true", help="无声作品，不要求音轨")
     parser.add_argument("--require-bilingual", action="store_true", help="强制每句都有 cn 与 en")
     args = parser.parse_args()
     report = Report()
-    if not number(args.fps) or args.fps <= 0 or args.width <= 0 or args.height <= 0:
-        parser.error("fps 和画面尺寸必须大于零且为有限值")
+    if (args.frames or args.video) and args.fps is None:
+        parser.error("检查帧序列或成片时必须提供 --fps")
+    if args.fps is not None and (not number(args.fps) or args.fps <= 0):
+        parser.error("fps 必须大于零且为有限值")
+    if any(v is not None and v <= 0 for v in (args.width, args.height)):
+        parser.error("画面尺寸必须大于零")
     try:
         data = json.loads(args.timeline.read_text(encoding="utf-8"))
         duration = validate_timeline(data, report, args.require_bilingual)
         if duration and args.frames:
-            validate_frames(args.frames, duration, args.fps, report)
+            validate_frames(args.frames, duration, args.fps, report, args.frame_ext.lstrip("."))
         if duration and args.video:
-            result = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(args.video)],
+            result = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(args.video)],
                                     capture_output=True, text=True, check=True, timeout=60)
             validate_media(json.loads(result.stdout), duration, args.fps, args.width, args.height, report, args.silent)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:

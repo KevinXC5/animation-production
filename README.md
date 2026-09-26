@@ -16,14 +16,16 @@
 |---|---|
 | `SKILL.md` | 技能入口：六阶段流程与各阶段门槛 |
 | `references/doubao-tts.md` | 豆包 TTS 配置交互、实测要点与接口文档（默认 TTS） |
+| `references/edge-tts.md` | edge-tts 免费备选方案：限制、配置交互与用法 |
 | `references/design.md` | 技术选型、视觉参考拆解、运动设计 |
 | `references/engineering.md` | 工程结构、时间线数据协议、缓存失效规则 |
 | `references/audio.md` | TTS、时间戳校验、配乐与混音 |
 | `references/rendering.md` | 样片审阅、后台长任务、编码与成片验收 |
 | `references/collaboration.md` | 子代理分工、中断恢复、跨项目复用 |
-| `scripts/tts_setup.py` | 豆包配置助手：状态检查、列出推荐音色、写入 .env |
+| `scripts/tts_setup.py` | TTS 配置助手：状态检查、列出和筛选音色、写入 .env |
 | `references/doubao-voices.json` | 官方 2.0 音色目录（431 个），用于校验音色 ID |
 | `scripts/doubao_tts.py` | 豆包 TTS 逐句合成：字级时间戳、关闭水印、指纹缓存 |
+| `scripts/edge_tts_synth.py` | edge-tts 免费逐句合成：词级时间戳、指纹缓存，输出格式与豆包脚本一致 |
 | `scripts/check_delivery.py` | 时间线、帧序列与成片参数检查 |
 | `tests/` | 检查脚本的回归测试 |
 
@@ -38,11 +40,22 @@ python3 scripts/doubao_tts.py --lines lines.json --out audio/tts --env .env
 
 依赖：`pip install websockets`，输出 MP3 时需要 ffmpeg。
 
+## edge-tts（免费备选）
+
+无需 APIKEY，音色写入 `.env` 的 `EDGE_VOICE` 或用 `--voice` 指定：
+
+```bash
+python3 scripts/edge_tts_synth.py --list-voices --locale zh-CN
+python3 scripts/edge_tts_synth.py --lines lines.json --out audio/tts --voice zh-CN-XiaoxiaoNeural
+```
+
+依赖：`pip install edge-tts`，输出 WAV 时需要 ffmpeg。非官方接口，可能变更或限流。
+
 ## 成片检查
 
 ```bash
-python3 scripts/check_delivery.py timeline.json --frames frames/ --video final.mp4
-python3 scripts/check_delivery.py timeline.json --video silent.mp4 --silent
+python3 scripts/check_delivery.py timeline.json --frames frames/ --video final.mp4 --fps 24 --width 1920 --height 1080
+python3 scripts/check_delivery.py timeline.json --video silent.mp4 --fps 30 --silent
 python3 -m unittest discover -s tests -v
 ```
 

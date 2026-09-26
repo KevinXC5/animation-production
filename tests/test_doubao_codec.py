@@ -60,6 +60,8 @@ class CodecTests(unittest.TestCase):
         self.assertTrue(M.validate("你好呀", pcm, ok))                     # 缺字
         self.assertTrue(M.validate("你好！", pcm, [{"w": "你好", "s": .1, "e": 1.5}]))  # 超出音频
         self.assertTrue(M.validate("你好！", b"", ok))                      # 空音频
+        self.assertTrue(M.validate("你好！", pcm, []))                      # 中英文必须有时间戳
+        self.assertEqual(M.validate("こんにちは", pcm, [], need_words=False), [])  # 其他语种允许为空
 
     def test_load_env_formats(self):
         import tempfile, os

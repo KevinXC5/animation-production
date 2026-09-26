@@ -9,7 +9,7 @@
 
 用法：
   python3 doubao_tts.py --text "你好，小朋友。" --out out/tts
-  python3 doubao_tts.py --lines lines.json --out out/tts [--env .env] [--rate 0] [--format mp3]
+  python3 doubao_tts.py --lines lines.json --out out/tts [--env .env] [--rate 0] [--format mp3] [--language zh-cn]
   lines.json：[{"id": "l01", "text": "……", "tone": "开心地说"}, ...]
 输出：<out>/<id>.<wav|mp3>、<out>/words.json、<out>/manifest.json
 凭据：环境变量或 .env 中的 APIKEY 与 VOICE（兼容 KEY=VALUE 与 KEY: VALUE）
@@ -32,6 +32,7 @@ RESOURCE_ID = "seed-tts-2.0"
 SR = 24000                 # PCM 采样率，16bit 单声道
 BYTES_PER_SEC = SR * 2
 CLIENT_VERSION = "1"       # 修改请求逻辑时递增，使旧缓存失效
+WORD_LANGS = {"zh-cn", "en"}   # 服务端只对中文和英文返回字级时间戳
 
 # ---------- 协议常量 ----------
 EV = dict(StartConnection=1, FinishConnection=2, ConnectionStarted=50, ConnectionFailed=51,
@@ -111,12 +112,14 @@ def text_key(s: str) -> str:
     return "".join(ch for ch in s if ch.isalnum())
 
 
-async def synthesize(text: str, tone: str, api_key: str, voice: str, rate: int, debug=False):
-    """合成一句，返回 (pcm 字节, 绝对时间戳列表 [{w,s,e}], 调试事件)。"""
+async def synthesize(text: str, tone: str, api_key: str, voice: str, rate: int, language: str = "zh-cn", debug=False):
+    """合成一句，返回 (pcm 字节, 绝对时间戳列表 [{w,s,e}])。language 为 auto 时交给服务端识别语种。"""
     import websockets
 
     headers = {"X-Api-Key": api_key, "X-Api-Resource-Id": RESOURCE_ID, "X-Api-Connect-Id": str(uuid.uuid4())}
-    additions = {"aigc_watermark": False, "explicit_language": "zh-cn", "disable_markdown_filter": True}
+    additions = {"aigc_watermark": False, "disable_markdown_filter": True}
+    if language != "auto":
+        additions["explicit_language"] = language
     if tone:
         additions["context_texts"] = [tone]
     req = {"speaker": voice,
@@ -181,12 +184,14 @@ async def synthesize(text: str, tone: str, api_key: str, voice: str, rate: int, 
     return bytes(pcm), words
 
 
-def validate(text: str, pcm: bytes, words: list) -> list[str]:
-    """逐句校验：音频非空、时间戳单调且在音频范围内、字幕文字完整。"""
+def validate(text: str, pcm: bytes, words: list, need_words: bool = True) -> list[str]:
+    """逐句校验：音频非空、时间戳单调且在音频范围内、字幕文字完整。
+
+    need_words 为假时（服务端不返回该语种的时间戳），缺少时间戳不算失败。"""
     problems, dur = [], len(pcm) / BYTES_PER_SEC
     if dur < 0.2:
         problems.append("音频过短或为空")
-    if not words:
+    if not words and need_words:
         problems.append("没有字级时间戳")
     last = 0.0
     for w in words:
@@ -227,6 +232,8 @@ async def main():
     ap.add_argument("--voice", help="覆盖 .env 中的 VOICE")
     ap.add_argument("--rate", type=int, default=0, help="语速 [-50,100]，0 为正常")
     ap.add_argument("--format", choices=["mp3", "wav"], default="mp3")
+    ap.add_argument("--language", default="zh-cn",
+                    help="explicit_language 取值，如 zh-cn（含中英混读）、en、ja；auto 为服务端自动识别")
     ap.add_argument("--only", default="", help="只合成这些 id（逗号分隔）")
     ap.add_argument("--force", action="store_true", help="忽略缓存")
     ap.add_argument("--concurrency", type=int, default=3)
@@ -242,6 +249,9 @@ async def main():
     if len(set(ids)) != len(ids):
         sys.exit("句子 id 重复")
     only = set(filter(None, a.only.split(",")))
+    need_words = a.language in WORD_LANGS
+    if not need_words:
+        print(f"提示：语种 {a.language} 不返回字级时间戳，字幕按句级时间处理")
 
     a.out.mkdir(parents=True, exist_ok=True)
     words_path, man_path = a.out / "words.json", a.out / "manifest.json"
@@ -261,8 +271,11 @@ async def main():
         if only and lid not in only:
             return
         tone = (a.tone_default + " " + ln.get("tone", "")).strip()
-        fp = hashlib.sha256(json.dumps([CLIENT_VERSION, RESOURCE_ID, voice, a.rate, a.format, ln["text"], tone],
-                                       ensure_ascii=False).encode()).hexdigest()[:16]
+        # 默认语种不进指纹，保证已有中文缓存不因新增参数而全部重新计费
+        key = [CLIENT_VERSION, RESOURCE_ID, voice, a.rate, a.format, ln["text"], tone]
+        if a.language != "zh-cn":
+            key.append(a.language)
+        fp = hashlib.sha256(json.dumps(key, ensure_ascii=False).encode()).hexdigest()[:16]
         path = a.out / f"{lid}.{a.format}"
         if not a.force and manifest.get(lid, {}).get("fp") == fp and path.exists() and lid in all_words:
             print(f"  · {lid} 缓存命中")
@@ -272,8 +285,8 @@ async def main():
                 if fatal.is_set():
                     return
                 try:
-                    pcm, words = await synthesize(ln["text"], tone, api_key, voice, a.rate, a.debug)
-                    problems = validate(ln["text"], pcm, words)
+                    pcm, words = await synthesize(ln["text"], tone, api_key, voice, a.rate, a.language, a.debug)
+                    problems = validate(ln["text"], pcm, words, need_words)
                     if problems:
                         raise RuntimeError("；".join(problems))
                     break

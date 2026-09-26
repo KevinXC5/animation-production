@@ -12,7 +12,7 @@
 6. **语气指令**：`additions.context_texts: ["……"]` 对语气影响明显，例如“激动兴奋，节奏很快”“压低声音，有点紧张”。复刻音色指定 `model` 后不能使用。
 7. **语速**：`speech_rate` 范围 `[-50, 100]`，`10–15` 已经明显偏快，适合节奏紧凑的解说。
 8. **音频格式**：脚本以 `pcm`（24 kHz、16bit、单声道）接收，按字节数得到精确时长，再落盘成 WAV 或 MP3。直接收 MP3 时无法可靠计算中途的音频时长。
-9. **中英混读**：`explicit_language: "zh-cn"`；设为 `en` 会跳过中文。
+9. **语种**：脚本默认 `--language zh-cn`（中文为主，支持中英混读）；纯英文用 `en`，其他语种按下文「语种」表取值，`auto` 为服务端自动识别。设为 `en` 会跳过中文。字级时间戳只对中文和英文返回，其他语种按句级时间处理，脚本不会因缺少时间戳而重试。
 10. **错误处理**：鉴权失败、配额不足等不可恢复的错误应立即停止，避免重复计费；网络中断可有限次重试。
 
 ## 配置
@@ -32,10 +32,11 @@ VOICE=<音色 ID，见 doubao-voices.json>
 
 1. **查状态**：`python3 <skill-dir>/scripts/tts_setup.py status --env <项目>/.env`，只看返回的掩码与字段，不读取或复述 `.env` 原文。
 2. **是否用豆包**：问“旁白用什么方式生成？”，选项：
-   - 豆包语音合成（推荐）：默认方案，自动得到字级时间戳，字幕按句与发声边界对齐
+   - 豆包语音合成（推荐）：音质和语气控制更好，自动得到字级时间戳；需要 APIKEY，按字符计费
+   - edge-tts（免费）：无需 APIKEY，音色自然、带词级时间戳；非官方接口，不支持语气指令
    - 不需要旁白：纯音乐或无声作品
-   - 其他 TTS 服务或真人录音：用户提供服务文档或音频
-   只有选豆包才继续下面的步骤。
+   - 其他 TTS 服务或真人录音：用户提供服务文档或音频（通过“Other”说明）
+   选豆包继续下面的步骤；选 edge-tts 转到 [edge-tts 使用文档](edge-tts.md) 的「配置交互」。
 3. **APIKEY**：
    - 已配置：问“检测到已有 APIKEY（显示掩码），怎么处理？”，选项“继续使用（推荐）/ 更换新的 key”。
    - 未配置或选择更换：问“请提供豆包语音的 APIKEY”，选项：
@@ -45,7 +46,7 @@ VOICE=<音色 ID，见 doubao-voices.json>
    - 用户给出 key 后，通过标准输入写入，不放在命令参数里：
      `printf '%s' '<key>' | python3 <skill-dir>/scripts/tts_setup.py set --env <项目>/.env --apikey-stdin`
    - 此后在回复、日志、文档中只显示掩码，不复述 key。key 获取地址：火山引擎控制台 → 豆包语音 → API Key 管理（https://console.volcengine.com/speech/new/setting/apikeys）。
-4. **选音色**：运行 `python3 <skill-dir>/scripts/tts_setup.py voices`，列出豆包控制台“推荐音色”中的 8 个音色（名称、ID、描述）。
+4. **选音色**：运行 `python3 <skill-dir>/scripts/tts_setup.py voices`，列出豆包控制台“推荐音色”中的 8 个音色（名称、ID、描述）。旁白不是中文，或推荐音色都不贴合作品时，用 `voices --lang <语种>`、`voices --keyword <关键词>` 从完整目录中筛选候选，例如 `--lang 美式英语`、`--keyword 角色扮演`。
    - 在回复里把 8 个音色以表格列出，再用 AskUserQuestion 问“选哪个音色？”。根据作品的受众、题材和旁白语气，从中挑出最贴合的 4 个作为选项，最贴合的放第一位标“（推荐）”，并在选项说明里写明适合的原因；其余音色或目录外的音色 ID 由用户在“Other”里填写。已有 VOICE 时，把“沿用当前音色 <名称>”放第一位作为推荐项。
    - 写入：`python3 <skill-dir>/scripts/tts_setup.py set --env <项目>/.env --voice <ID>`。脚本会校验 ID、将 `.env` 设为 600 权限，并在 git 仓库里把 `.env` 加入 `.gitignore`。
 5. **确认**：再次运行 status，向用户汇报 `.env` 路径、APIKEY 掩码与音色名称，然后进入剧本与合成。
@@ -61,6 +62,9 @@ python3 <skill-dir>/scripts/doubao_tts.py --text "你好，欢迎来到今天的
 python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --env .env \
   --tone-default "<全片通用的说话身份与语气>" --format mp3
 
+# 英文或其他语种旁白
+python3 <skill-dir>/scripts/doubao_tts.py --lines lines_en.json --out audio/tts_en --env .env --language en
+
 # 只重合成某几句 / 忽略缓存 / 查看时间基准判定
 python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --only c1_01,c1_02
 python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --force --debug
@@ -69,7 +73,7 @@ python3 <skill-dir>/scripts/doubao_tts.py --lines lines.json --out audio/tts --f
 输出：
 - `<out>/<id>.mp3|wav`：每句音频
 - `<out>/words.json`：`{id: [{"w","s","e"}]}`，单位为秒，从该句音频开头算起
-- `<out>/manifest.json`：每句的输入指纹、时长和文件名；文本、语气、音色、语速或格式改变时自动重新合成
+- `<out>/manifest.json`：每句的输入指纹、时长和文件名；文本、语气、音色、语速、格式或语种改变时自动重新合成
 
 每句都会校验：音频非空、时间戳单调且不超出音频、字幕文字完整覆盖原文。不通过就重试，重试仍失败则以非零退出码结束。
 

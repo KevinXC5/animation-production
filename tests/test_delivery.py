@@ -118,6 +118,25 @@ class DeliveryTests(unittest.TestCase):
         MODULE.validate_media(info, 3, 24, 1920, 1080, report)
         self.assertTrue(report.errors)
 
+    def test_png_frames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for i in range(2):
+                (root / f"f{i:05d}.png").write_bytes(b"png")
+            report = MODULE.Report()
+            MODULE.validate_frames(root, 1.0, 2, report, "png")
+            self.assertFalse(report.errors)
+
+    def test_media_size_optional_and_format_duration(self):
+        # 竖屏、无轨道时长的 WebM：不传尺寸不报错，时长取容器层
+        info = {"streams": [{"codec_type": "video", "width": 1080, "height": 1920,
+                             "avg_frame_rate": "30/1", "codec_name": "vp9"}],
+                "format": {"duration": "3.0"}}
+        report = MODULE.Report()
+        MODULE.validate_media(info, 3, 30, None, None, report, silent=True)
+        self.assertFalse(report.errors)
+        self.assertEqual(report.facts["height"], 1920)
+
 
 if __name__ == "__main__":
     unittest.main()
